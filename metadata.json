@@ -1,0 +1,5 @@
+{
+  "name": "Tanakh Palindrome Finder",
+  "description": "A sophisticated tool to find palindromes (words or phrases that read the same forwards and backwards) in the Hebrew Bible, using Hebrew letter normalization and AI-powered discovery.",
+  "requestFramePermissions": []
+}
