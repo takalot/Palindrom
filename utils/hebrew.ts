@@ -1,13 +1,25 @@
 
 /**
  * Normalizes Hebrew text for palindrome checking:
- * 1. Removes Niqqud (vowels) and punctuation.
- * 2. Converts final letters (Sofit) to regular letters.
- * 3. Keeps only Hebrew characters.
+ * 1. Removes common Biblical reference patterns (Chapter:Verse markers).
+ * 2. Removes Niqqud (vowels) and punctuation.
+ * 3. Converts final letters (Sofit) to regular letters.
+ * 4. Keeps only Hebrew characters.
  */
 export const normalizeHebrew = (text: string): string => {
+  // First, identify and remove common Biblical reference patterns (e.g., "מט,י", (מט, י), א:ב)
+  // These usually consist of 1-3 Hebrew letters followed by a comma or colon and then 1-3 more letters.
+  
+  // Pattern 1: "Letters,Letters" or "Letters:Letters" or Letters,Letters
+  const refPattern = /["'״׳(]?[\u05D0-\u05EA]{1,3}[,:][\u05D0-\u05EA]{1,3}["'״׳)]?/g;
+  let textWithoutRefs = text.replace(refPattern, ' ');
+
+  // Pattern 2: References like (מט י) or [מט י]
+  const parenRefPattern = /[(\[][\u05D0-\u05EA]{1,3}\s+[\u05D0-\u05EA]{1,3}[)\]]/g;
+  textWithoutRefs = textWithoutRefs.replace(parenRefPattern, ' ');
+
   // Remove Niqqud (Hebrew vowels range from \u0591 to \u05C7)
-  const noVowels = text.replace(/[\u0591-\u05C7]/g, '');
+  const noVowels = textWithoutRefs.replace(/[\u0591-\u05C7]/g, '');
   
   // Normalize final letters to regular letters
   const sofitMap: Record<string, string> = {
@@ -49,39 +61,49 @@ export const findPalindromes = (text: string, minLength: number = 3, maxLength: 
   const results: { normalized: string; original: string; length: number }[] = [];
   
   // We iterate through substrings of the original text
-  // This ensures we can map the normalized palindrome back to the source words.
   for (let i = 0; i < text.length; i++) {
-    // Skip if starting with whitespace or non-hebrew
-    if (!text[i].match(/[\u05D0-\u05EA]/)) continue;
+    // Optimization: find start of a potential sequence
+    if (!text[i].match(/[\u05D0-\u05EA"'״׳(]/)) continue;
 
     for (let j = i + 1; j <= text.length; j++) {
       const originalSub = text.substring(i, j);
+      
+      // Safety break for extremely long substrings
+      if (originalSub.length > maxLength * 4) break; 
+      
       const normalizedSub = normalizeHebrew(originalSub);
       
       if (normalizedSub.length > maxLength) break;
       
       if (normalizedSub.length >= minLength && isPalindrome(normalizedSub)) {
-        // Basic check to avoid redundant substrings (like including extra spaces at the end)
-        const lastChar = originalSub[originalSub.length - 1];
-        if (lastChar.match(/[\u05D0-\u05EA]/)) {
-          results.push({
-            normalized: normalizedSub,
-            original: originalSub,
-            length: normalizedSub.length
-          });
-        }
+        results.push({
+          normalized: normalizedSub,
+          original: originalSub.trim(),
+          length: normalizedSub.length
+        });
       }
     }
   }
   
-  // Filter duplicates: keep only the most representative match for each unique combination
+  // Filter duplicates and overlapping sequences
   const uniqueMatches = new Map<string, { normalized: string; original: string; length: number }>();
+  
+  // Sort results by length descending so we process longer ones first
+  results.sort((a, b) => b.length - a.length);
+
   results.forEach(res => {
-    const key = `${res.normalized}_${res.original}`;
+    // Use a composite key or normalized text to group
+    const key = res.normalized;
     if (!uniqueMatches.has(key)) {
       uniqueMatches.set(key, res);
+    } else {
+      const existing = uniqueMatches.get(key)!;
+      // Prefer shorter original strings for the same normalized sequence (less noise)
+      if (res.original.length < existing.original.length) {
+         uniqueMatches.set(key, res);
+      }
     }
   });
 
-  return Array.from(uniqueMatches.values());
+  return Array.from(uniqueMatches.values()).sort((a, b) => b.length - a.length);
 };
